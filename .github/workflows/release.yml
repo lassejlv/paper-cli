@@ -40,42 +40,36 @@ jobs:
             format: tar.gz
             asset: paper-x86_64-apple-darwin.tar.gz
             python: python3
-            shell: bash
           - runner: macos-15
             target: aarch64-apple-darwin
             binary: target/aarch64-apple-darwin/release/paper
             format: tar.gz
             asset: paper-aarch64-apple-darwin.tar.gz
             python: python3
-            shell: bash
           - runner: ubuntu-24.04
             target: x86_64-unknown-linux-gnu
             binary: target/x86_64-unknown-linux-gnu/release/paper
             format: tar.gz
             asset: paper-x86_64-unknown-linux-gnu.tar.gz
             python: python3
-            shell: bash
           - runner: ubuntu-24.04-arm
             target: aarch64-unknown-linux-gnu
             binary: target/aarch64-unknown-linux-gnu/release/paper
             format: tar.gz
             asset: paper-aarch64-unknown-linux-gnu.tar.gz
             python: python3
-            shell: bash
           - runner: windows-2025
             target: x86_64-pc-windows-msvc
             binary: target/x86_64-pc-windows-msvc/release/paper.exe
             format: zip
             asset: paper-x86_64-pc-windows-msvc.zip
             python: python
-            shell: pwsh
           - runner: windows-11-arm
             target: aarch64-pc-windows-msvc
             binary: target/aarch64-pc-windows-msvc/release/paper.exe
             format: zip
             asset: paper-aarch64-pc-windows-msvc.zip
             python: python
-            shell: pwsh
 
     runs-on: ${{ matrix.runner }}
     steps:
@@ -85,15 +79,12 @@ jobs:
           ref: ${{ github.event.release.tag_name }}
 
       - name: Install stable Rust target
-        shell: ${{ matrix.shell }}
         run: rustup toolchain install stable --profile minimal --target "${{ matrix.target }}"
 
       - name: Build release binary
-        shell: ${{ matrix.shell }}
         run: cargo +stable build --locked --release --target "${{ matrix.target }}"
 
       - name: Package release asset
-        shell: ${{ matrix.shell }}
         run: >-
           ${{ matrix.python }} scripts/package_release.py
           --target "${{ matrix.target }}"
