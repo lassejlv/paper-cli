@@ -1,0 +1,154 @@
+name: Release binaries
+
+on:
+  release:
+    types: [prereleased]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.event.release.tag_name }}
+  cancel-in-progress: false
+
+jobs:
+  test:
+    name: Test release source
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out release tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
+
+      - name: Install stable Rust
+        run: rustup toolchain install stable --profile minimal
+
+      - name: Run tests
+        run: cargo +stable test --locked --all-targets --all-features
+
+  build:
+    name: Build ${{ matrix.target }}
+    needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15-intel
+            target: x86_64-apple-darwin
+            binary: target/x86_64-apple-darwin/release/paper
+            format: tar.gz
+            asset: paper-x86_64-apple-darwin.tar.gz
+            python: python3
+            shell: bash
+          - runner: macos-15
+            target: aarch64-apple-darwin
+            binary: target/aarch64-apple-darwin/release/paper
+            format: tar.gz
+            asset: paper-aarch64-apple-darwin.tar.gz
+            python: python3
+            shell: bash
+          - runner: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+            binary: target/x86_64-unknown-linux-gnu/release/paper
+            format: tar.gz
+            asset: paper-x86_64-unknown-linux-gnu.tar.gz
+            python: python3
+            shell: bash
+          - runner: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+            binary: target/aarch64-unknown-linux-gnu/release/paper
+            format: tar.gz
+            asset: paper-aarch64-unknown-linux-gnu.tar.gz
+            python: python3
+            shell: bash
+          - runner: windows-2025
+            target: x86_64-pc-windows-msvc
+            binary: target/x86_64-pc-windows-msvc/release/paper.exe
+            format: zip
+            asset: paper-x86_64-pc-windows-msvc.zip
+            python: python
+            shell: pwsh
+          - runner: windows-11-arm
+            target: aarch64-pc-windows-msvc
+            binary: target/aarch64-pc-windows-msvc/release/paper.exe
+            format: zip
+            asset: paper-aarch64-pc-windows-msvc.zip
+            python: python
+            shell: pwsh
+
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: Check out release tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
+
+      - name: Install stable Rust target
+        shell: ${{ matrix.shell }}
+        run: rustup toolchain install stable --profile minimal --target "${{ matrix.target }}"
+
+      - name: Build release binary
+        shell: ${{ matrix.shell }}
+        run: cargo +stable build --locked --release --target "${{ matrix.target }}"
+
+      - name: Package release asset
+        shell: ${{ matrix.shell }}
+        run: >-
+          ${{ matrix.python }} scripts/package_release.py
+          --target "${{ matrix.target }}"
+          --binary "${{ matrix.binary }}"
+          --format "${{ matrix.format }}"
+          --output "dist/${{ matrix.asset }}"
+
+      - name: Upload packaged binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.target }}
+          path: dist/${{ matrix.asset }}
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    name: Attach assets and promote release
+    needs: build
+    runs-on: ubuntu-24.04
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_TAG: ${{ github.event.release.tag_name }}
+    steps:
+      - name: Download packaged binaries
+        uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          path: dist
+          merge-multiple: true
+
+      - name: Verify release assets
+        shell: bash
+        run: |
+          expected=(
+            paper-x86_64-apple-darwin.tar.gz
+            paper-aarch64-apple-darwin.tar.gz
+            paper-x86_64-unknown-linux-gnu.tar.gz
+            paper-aarch64-unknown-linux-gnu.tar.gz
+            paper-x86_64-pc-windows-msvc.zip
+            paper-aarch64-pc-windows-msvc.zip
+          )
+          for asset in "${expected[@]}"; do
+            test -s "dist/$asset"
+          done
+          test "$(find dist -maxdepth 1 -type f | wc -l)" -eq "${#expected[@]}"
+
+      - name: Generate SHA-256 checksums
+        shell: bash
+        working-directory: dist
+        run: sha256sum paper-* > SHA256SUMS
+
+      - name: Attach assets to prerelease
+        shell: bash
+        run: gh release upload "$RELEASE_TAG" dist/* --clobber
+
+      - name: Promote to full release
+        shell: bash
+        run: gh release edit "$RELEASE_TAG" --prerelease=false --draft=false --latest

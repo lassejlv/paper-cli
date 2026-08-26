@@ -211,3 +211,31 @@ cargo fmt --check
 cargo clippy --all-targets --all-features -- -D warnings
 cargo test --all-targets --all-features
 ```
+
+## Releasing
+
+Create a GitHub release for the intended tag and publish it as a prerelease. The
+`Release binaries` workflow then:
+
+1. Tests the tagged source.
+2. Builds native Intel and ARM binaries for macOS, Linux, and Windows.
+3. Packages each binary with this README and license.
+4. Attaches all six archives and `SHA256SUMS` to the prerelease.
+5. Promotes it to the normal/latest release only after every build and upload
+   succeeds.
+
+Release assets:
+
+```text
+paper-x86_64-apple-darwin.tar.gz
+paper-aarch64-apple-darwin.tar.gz
+paper-x86_64-unknown-linux-gnu.tar.gz
+paper-aarch64-unknown-linux-gnu.tar.gz
+paper-x86_64-pc-windows-msvc.zip
+paper-aarch64-pc-windows-msvc.zip
+SHA256SUMS
+```
+
+GitHub prereleases are already visible when the workflow starts. Promotion is
+delayed until all assets exist, but the prerelease itself is not private during
+the build.
