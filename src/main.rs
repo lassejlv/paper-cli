@@ -1,6 +1,7 @@
 mod context;
 mod mcp;
 mod output;
+mod upgrade;
 
 use std::{
     fs,
@@ -46,6 +47,9 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Command {
+    /// Update this CLI and the globally installed use-paper-cli skill.
+    Upgrade,
+
     /// Connect and print Paper's server information and capabilities.
     Status {
         /// Print only connection and protocol details.
@@ -197,6 +201,11 @@ fn main() -> ExitCode {
 
 fn run() -> Result<()> {
     let cli = Cli::parse();
+    if matches!(&cli.command, Command::Upgrade) {
+        print_json(&upgrade::run()?, cli.compact)?;
+        return Ok(());
+    }
+
     let timeout = Duration::from_secs(cli.timeout);
     let short_status = matches!(&cli.command, Command::Status { short: true });
     let connection = McpClient::connect(&cli.url, timeout);
@@ -210,6 +219,7 @@ fn run() -> Result<()> {
     };
 
     let output = match cli.command {
+        Command::Upgrade => unreachable!("upgrade is handled before connecting to Paper"),
         Command::Status { short } => Some(status_output(&cli.url, Some(&initialize_result), short)),
         Command::Tools { names } => {
             let tools = client.list_tools()?;
@@ -501,6 +511,14 @@ mod tests {
                 .unwrap()
                 .command,
             Command::Notify { method, params: None } if method == "notifications/cancelled"
+        ));
+    }
+
+    #[test]
+    fn upgrade_command_parses_without_paper_arguments() {
+        assert!(matches!(
+            Cli::try_parse_from(["paper", "upgrade"]).unwrap().command,
+            Command::Upgrade
         ));
     }
 

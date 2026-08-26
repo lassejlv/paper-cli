@@ -20,10 +20,26 @@ Paper Desktop serves MCP at `http://127.0.0.1:29979/mcp` by default.
 ## Install
 
 ```sh
-cargo install --path .
+cargo install --git https://github.com/lassejlv/paper-cli --locked
 ```
 
 This installs the binary as `paper`.
+
+## Upgrade
+
+Update both the globally installed `use-paper-cli` agent skill and the CLI:
+
+```sh
+paper upgrade
+```
+
+This command does not connect to Paper Desktop. It updates the skill with the
+`skills` CLI, then reinstalls `paper-cli` from this repository. It requires
+`npx`, Cargo, and internet access. Progress and subprocess diagnostics go to
+stderr; successful stdout is concise JSON describing both updated components.
+
+The skill must have been installed globally through `npx skills`. If either
+prerequisite is missing, the command fails before changing either component.
 
 ## Check connectivity
 

@@ -21,7 +21,7 @@ a remembered argument shape.
    Suggested installation from this repository:
 
    ```sh
-   cargo install --path .
+   cargo install --git https://github.com/lassejlv/paper-cli --locked
    ```
 
 3. Paper Desktop must be running. A Paper file must be open for design tools.
@@ -206,6 +206,21 @@ After meaningful changes:
    ```
 
 If the live schema requires arguments, follow it instead of the example.
+
+## Upgrade the CLI and skill
+
+Only when the user explicitly asks to update Paper CLI, run:
+
+```sh
+paper upgrade
+```
+
+This updates the globally installed `use-paper-cli` skill through
+`npx skills@latest`, then reinstalls the CLI from its GitHub repository through
+Cargo. It does not require Paper Desktop to be running. It does require `npx`,
+Cargo, internet access, and an existing global skill installation. Treat a
+nonzero exit as a partial or failed upgrade and report the failed component and
+the retry command shown by the CLI.
 
 ## Safety rules
 
