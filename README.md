@@ -25,14 +25,54 @@ cargo install --path .
 
 This installs the binary as `paper`.
 
-## Agent workflow
+## Check connectivity
+
+Print Paper's complete initialization response:
+
+```sh
+paper status
+```
+
+For a concise health check with only the endpoint, server, and protocol:
+
+```sh
+paper status --short
+```
+
+The short form emits JSON and exits nonzero if Paper Desktop cannot be reached.
+
+## List and open files
+
+List open and recently accessed Paper files as structured MCP JSON:
+
+```sh
+paper files
+paper files --limit 100
+```
+
+For an interactive name-only list:
+
+```sh
+paper files --names
+```
+
+Open a file by ID, route, or full Paper URL, optionally at a page:
+
+```sh
+paper open 01M0YQM4F9KY2YBG2MFCP1J27Q
+paper open 'https://app.paper.design/file/01M0YQM4F9KY2YBG2MFCP1J27Q' --page-id 1-0
+```
+
+These are thin adapters over Paper's live `list_files` and `open_file` tools.
+
+## Discover and call tools
 
 Discover capabilities instead of guessing tool names or arguments:
 
 ```sh
-paper status
-paper tools
+paper tools --names
 paper schema get_node_info
+paper schema get_screenshot
 ```
 
 Call any tool with an inline JSON object:
@@ -50,13 +90,54 @@ paper call write_html @write-html.json
 printf '%s' '{"nodeIds":["1-2"]}' | paper call get_computed_styles -
 ```
 
-Responses are JSON by default, preserving MCP text, images, embedded resources,
-structured content, and annotations without loss. Use `--text` when a tool
-returns text content and only that text is wanted:
+## Capture images
+
+Decode a screenshot directly to disk through the generic `call` workflow:
+
+```sh
+paper call get_screenshot '{"nodeId":"1-2"}' --output captures/screenshot.jpg
+```
+
+The convenience command delegates to that same live Paper tool and output path:
+
+```sh
+paper screenshot 1-2 --output captures/screenshot.jpg --scale 1
+paper screenshot 1-2 --output captures/screenshot.jpg --file-id 01M0YQM4F9KY2YBG2MFCP1J27Q
+```
+
+The output extension must match the returned MIME type. If the path has no
+extension, the CLI infers one for supported image formats. Parent directories
+are created automatically. Existing files are protected by default:
+
+```sh
+# Fails if captures/screenshot.jpg already exists
+paper screenshot 1-2 --output captures/screenshot.jpg
+
+# Explicitly replace it
+paper screenshot 1-2 --output captures/screenshot.jpg --force
+```
+
+On success, stdout contains concise JSON with the final path, MIME type, and
+byte count.
+
+## Choose an output mode
+
+With no output option, responses remain structured JSON, preserving MCP text,
+images, embedded resources, structured content, and annotations without loss:
+
+```sh
+paper call get_screenshot '{"nodeId":"1-2"}'
+```
+
+Use `--text` only when a tool returns text content:
 
 ```sh
 paper call get_basic_info --text
 ```
+
+The CLI rejects `--text` for images and other non-text MCP content so base64 is
+not accidentally dumped to the terminal. Use `--output <path>` to decode one
+image, or omit both options to preserve the complete JSON response.
 
 Use compact JSON for scripts:
 
@@ -99,6 +180,6 @@ working-node lifecycle.
 
 ```sh
 cargo fmt --check
-cargo test
-cargo clippy --all-targets -- -D warnings
+cargo clippy --all-targets --all-features -- -D warnings
+cargo test --all-targets --all-features
 ```
