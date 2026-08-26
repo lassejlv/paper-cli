@@ -1,3 +1,4 @@
+mod context;
 mod mcp;
 mod output;
 
@@ -10,7 +11,8 @@ use std::{
 };
 
 use anyhow::{Context, Result, bail};
-use clap::{Parser, Subcommand};
+use clap::{ArgGroup, Parser, Subcommand};
+use context::{ScreenshotTarget, capture_screenshot, read_context};
 use mcp::McpClient;
 use output::{PreparedOutput, file_names_text, prepare_tool_output};
 use serde_json::{Map, Value, json};
@@ -87,9 +89,27 @@ enum Command {
     },
 
     /// Capture a Paper node directly to an image file.
+    #[command(group(
+        ArgGroup::new("screenshot_target")
+            .required(true)
+            .multiple(false)
+            .args(["node_id", "selected", "active_artboard", "artboard"])
+    ))]
     Screenshot {
         /// ID of the node to capture.
-        node_id: String,
+        node_id: Option<String>,
+
+        /// Capture the single currently selected node.
+        #[arg(long)]
+        selected: bool,
+
+        /// Capture the selected node's artboard, or the page's only artboard.
+        #[arg(long)]
+        active_artboard: bool,
+
+        /// Capture an artboard whose full name matches exactly.
+        #[arg(long, value_name = "EXACT_NAME")]
+        artboard: Option<String>,
 
         /// Destination image path.
         #[arg(long, value_name = "PATH")]
@@ -106,6 +126,17 @@ enum Command {
         /// Overwrite an existing output file.
         #[arg(long)]
         force: bool,
+    },
+
+    /// Print the current Paper file, page, artboards, and selection.
+    Context {
+        /// Omit raw MCP results and raw node IDs.
+        #[arg(long)]
+        short: bool,
+
+        /// Paper file ID when more than one file is open.
+        #[arg(long)]
+        file_id: Option<String>,
     },
 
     /// List open and recently accessed Paper files.
@@ -220,21 +251,26 @@ fn run() -> Result<()> {
         }
         Command::Screenshot {
             node_id,
+            selected,
+            active_artboard,
+            artboard,
             output,
             scale,
             file_id,
             force,
         } => {
-            let mut arguments = Map::new();
-            arguments.insert("nodeId".into(), Value::String(node_id));
-            if let Some(scale) = scale {
-                arguments.insert("scale".into(), json!(scale));
-            }
-            if let Some(file_id) = file_id {
-                arguments.insert("fileId".into(), Value::String(file_id));
-            }
-            let result = client.call_tool("get_screenshot", Value::Object(arguments))?;
+            let target = match (node_id, selected, active_artboard, artboard) {
+                (Some(node_id), false, false, None) => ScreenshotTarget::NodeId(node_id),
+                (None, true, false, None) => ScreenshotTarget::Selected,
+                (None, false, true, None) => ScreenshotTarget::ActiveArtboard,
+                (None, false, false, Some(name)) => ScreenshotTarget::Artboard(name),
+                _ => unreachable!("Clap enforces exactly one screenshot target"),
+            };
+            let result = capture_screenshot(&mut client, target, file_id.as_deref(), scale)?;
             emit_prepared_output(prepare_tool_output(result, false, Some(&output), force)?)
+        }
+        Command::Context { short, file_id } => {
+            Some(read_context(&mut client, file_id.as_deref())?.output(short))
         }
         Command::Files { limit, names } => {
             let result = client.call_tool("list_files", json!({ "limit": limit }))?;
@@ -510,7 +546,10 @@ mod tests {
             .unwrap()
             .command,
             Command::Screenshot {
-                node_id,
+                node_id: Some(node_id),
+                selected: false,
+                active_artboard: false,
+                artboard: None,
                 output,
                 scale: Some(1.0),
                 file_id: Some(file_id),
@@ -533,6 +572,105 @@ mod tests {
                 file_id_or_url,
                 page_id: Some(page_id)
             } if file_id_or_url == "https://app.paper.design/file/file-1" && page_id == "1-0"
+        ));
+    }
+
+    #[test]
+    fn screenshot_target_modes_parse() {
+        assert!(matches!(
+            Cli::try_parse_from([
+                "paper",
+                "screenshot",
+                "--selected",
+                "--output",
+                "selected.png"
+            ])
+            .unwrap()
+            .command,
+            Command::Screenshot {
+                node_id: None,
+                selected: true,
+                active_artboard: false,
+                artboard: None,
+                ..
+            }
+        ));
+        assert!(matches!(
+            Cli::try_parse_from([
+                "paper",
+                "screenshot",
+                "--active-artboard",
+                "--output",
+                "artboard.jpg"
+            ])
+            .unwrap()
+            .command,
+            Command::Screenshot {
+                node_id: None,
+                selected: false,
+                active_artboard: true,
+                artboard: None,
+                ..
+            }
+        ));
+        assert!(matches!(
+            Cli::try_parse_from([
+                "paper",
+                "screenshot",
+                "--artboard",
+                "Dashboard — Desktop",
+                "--output",
+                "artboard.jpg"
+            ])
+            .unwrap()
+            .command,
+            Command::Screenshot {
+                node_id: None,
+                selected: false,
+                active_artboard: false,
+                artboard: Some(name),
+                ..
+            } if name == "Dashboard — Desktop"
+        ));
+    }
+
+    #[test]
+    fn screenshot_target_modes_conflict_before_execution() {
+        let conflict = Cli::try_parse_from([
+            "paper",
+            "screenshot",
+            "node-1",
+            "--selected",
+            "--output",
+            "shot.jpg",
+        ])
+        .unwrap_err();
+        assert_eq!(conflict.kind(), clap::error::ErrorKind::ArgumentConflict);
+
+        let missing =
+            Cli::try_parse_from(["paper", "screenshot", "--output", "shot.jpg"]).unwrap_err();
+        assert_eq!(
+            missing.kind(),
+            clap::error::ErrorKind::MissingRequiredArgument
+        );
+    }
+
+    #[test]
+    fn short_context_flag_parses() {
+        assert!(matches!(
+            Cli::try_parse_from([
+                "paper",
+                "context",
+                "--short",
+                "--file-id",
+                "file-1"
+            ])
+            .unwrap()
+            .command,
+            Command::Context {
+                short: true,
+                file_id: Some(file_id)
+            } if file_id == "file-1"
         ));
     }
 

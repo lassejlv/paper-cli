@@ -41,6 +41,16 @@ paper status --short
 
 The short form emits JSON and exits nonzero if Paper Desktop cannot be reached.
 
+Inspect the current file, page, artboards, and selection without raw node IDs:
+
+```sh
+paper context --short
+paper context --short --file-id 01M0YQM4F9KY2YBG2MFCP1J27Q
+```
+
+Without `--short`, `paper context` preserves the raw `get_basic_info` and
+`get_selection` MCP results as structured JSON.
+
 ## List and open files
 
 List open and recently accessed Paper files as structured MCP JSON:
@@ -98,12 +108,30 @@ Decode a screenshot directly to disk through the generic `call` workflow:
 paper call get_screenshot '{"nodeId":"1-2"}' --output captures/screenshot.jpg
 ```
 
-The convenience command delegates to that same live Paper tool and output path:
+The convenience command can resolve a human-friendly target before delegating
+to that same live Paper tool and output path:
 
 ```sh
+paper screenshot --active-artboard --output captures/artboard.jpg
+paper screenshot --selected --output captures/selection.png
+paper screenshot --artboard "Dashboard — Desktop" --output captures/dashboard.jpg
 paper screenshot 1-2 --output captures/screenshot.jpg --scale 1
 paper screenshot 1-2 --output captures/screenshot.jpg --file-id 01M0YQM4F9KY2YBG2MFCP1J27Q
 ```
+
+Supply exactly one target:
+
+- `--selected` requires exactly one selected node.
+- `--active-artboard` uses the single selected node's artboard, then falls back
+  to the active page only when that page has exactly one artboard.
+- `--artboard "<exact-name>"` matches one full artboard name without fuzzy
+  matching.
+- A positional node ID remains available when a known non-selection node is the
+  intended target or automation already has its ID.
+
+Ambiguous selections and artboard names fail without guessing. Errors list
+human-readable names, not raw node IDs. Pass `--file-id` to keep selection,
+artboard resolution, and capture scoped to the same Paper file.
 
 The output extension must match the returned MIME type. If the path has no
 extension, the CLI infers one for supported image formats. Parent directories

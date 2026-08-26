@@ -29,9 +29,14 @@ Expected connected shape:
 Then verify the active design:
 
 ```sh
+paper context --short
 paper call get_basic_info --text
 paper call get_selection --text
 ```
+
+Use `paper context --short --file-id <file-id>` when several files are open. The
+short form includes file/page names, artboard names and dimensions, selected
+node names, and the selection count without exposing raw node IDs.
 
 Do not continue with a mutation if the reported file, page, or selection is not
 the user's intended target.
@@ -151,11 +156,35 @@ paper call get_screenshot '{"nodeId":"<node-id>","scale":1}' \
 Equivalent convenience command:
 
 ```sh
-paper screenshot <node-id> \
-  --output captures/current-state.jpg \
-  --scale 1 \
+paper screenshot --active-artboard \
+  --output captures/artboard.jpg \
+  --scale 1
+
+paper screenshot --selected \
+  --output captures/selection.png
+
+paper screenshot --artboard "Dashboard — Desktop" \
+  --output captures/dashboard.jpg \
   --file-id <file-id>
+
+paper screenshot <node-id> \
+  --output captures/current-state.jpg
 ```
+
+Supply exactly one of the positional node ID, `--selected`,
+`--active-artboard`, or `--artboard`.
+
+- Use `--selected` when one visible design node is selected.
+- Use `--active-artboard` when the selection belongs to the desired artboard,
+  or when the active page has only one artboard.
+- Use `--artboard` when several artboards exist and the exact full name is
+  known.
+- Use a raw node ID for automation that already resolved a specific node, or
+  for a node that is not naturally addressed by selection or artboard name.
+
+The CLI does not guess when multiple nodes are selected, multiple artboards are
+possible, or duplicate artboard names exist. It reports human-readable names
+and asks for a narrower target.
 
 The success response is concise JSON:
 

@@ -58,9 +58,10 @@ Use the generic commands as the foundation:
 Use convenience commands only where they fit exactly:
 
 - `paper status --short`
+- `paper context --short [--file-id <id>]`
 - `paper files [--limit 50] [--names]`
 - `paper open <file-id-or-url> [--page-id <id>]`
-- `paper screenshot <node-id> --output <path> [--scale 1] [--file-id <id>] [--force]`
+- `paper screenshot <target> --output <path> [--scale 1] [--file-id <id>] [--force]`
 
 ## Standard workflow
 
@@ -69,6 +70,7 @@ Use convenience commands only where they fit exactly:
 ```sh
 paper status --short
 paper files
+paper context --short
 paper call get_basic_info --text
 paper call get_selection --text
 ```
@@ -127,8 +129,23 @@ Use `--output` when exactly one image is expected:
 
 ```sh
 paper call get_screenshot '{"nodeId":"<node-id>"}' --output captures/screen.jpg
+paper screenshot --active-artboard --output captures/artboard.jpg
+paper screenshot --selected --output captures/selection.png
+paper screenshot --artboard "Dashboard — Desktop" --output captures/dashboard.jpg
 paper screenshot <node-id> --output captures/screen.jpg --scale 1
 ```
+
+Screenshot convenience targets are mutually exclusive:
+
+- `--selected` requires exactly one selected node.
+- `--active-artboard` prefers the single selected node's artboard and otherwise
+  requires exactly one artboard on the active page.
+- `--artboard "<exact-name>"` requires one exact full-name match.
+- Use a positional node ID when a known node that is not naturally selected or
+  named as an artboard is the intended target.
+
+The CLI reports ambiguity with human-readable names and never chooses the first
+match. Use `--file-id` when resolving against a specific open file.
 
 The extension must match the returned MIME type. Omit the extension when the
 CLI should infer it. Parent directories are created automatically. Never add
