@@ -13,17 +13,42 @@ other MCP methods.
 
 - Paper Desktop is running.
 - A Paper file is open.
-- A current stable Rust toolchain (the project uses Rust 2024).
 
 Paper Desktop serves MCP at `http://127.0.0.1:29979/mcp` by default.
 
 ## Install
 
+Install the latest macOS or Linux binary:
+
+```sh
+curl --proto '=https' --tlsv1.2 -LsSf \
+  https://raw.githubusercontent.com/lassejlv/paper-cli/main/install.sh | sh
+```
+
+The installer detects Intel or ARM, verifies the release checksum, and installs
+`paper` to `~/.local/bin`. Make sure that directory is on `PATH`. To choose
+another install directory or pin a release, pass overrides to `sh`:
+
+```sh
+curl --proto '=https' --tlsv1.2 -LsSf \
+  https://raw.githubusercontent.com/lassejlv/paper-cli/main/install.sh |
+  PAPER_INSTALL_DIR="$HOME/bin" PAPER_VERSION=v0.1.0 sh
+```
+
+Windows users can download the matching `.zip` from
+[GitHub Releases](https://github.com/lassejlv/paper-cli/releases).
+
+To build and install from source instead, use a current stable Rust toolchain:
+
 ```sh
 cargo install --git https://github.com/lassejlv/paper-cli --locked
 ```
 
-This installs the binary as `paper`.
+Install the optional agent skill separately:
+
+```sh
+npx --yes skills add https://github.com/lassejlv/paper-cli
+```
 
 ## Upgrade
 
