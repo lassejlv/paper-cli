@@ -216,11 +216,13 @@ paper upgrade
 ```
 
 This updates the globally installed `use-paper-cli` skill through
-`npx skills@latest`, then reinstalls the CLI from its GitHub repository through
-Cargo. It does not require Paper Desktop to be running. It does require `npx`,
-Cargo, internet access, and an existing global skill installation. Treat a
-nonzero exit as a partial or failed upgrade and report the failed component and
-the retry command shown by the CLI.
+`npx skills@latest`, then runs the repository's checksum-verifying installer in
+the directory containing the current `paper` executable. It does not require
+Paper Desktop or Cargo. It does require `npx`, a POSIX shell, internet access,
+and an existing global skill installation. Automatic CLI upgrades currently
+support macOS and Linux; Windows users must install the latest release archive
+manually. Treat a nonzero exit as a partial or failed upgrade and report the
+failed component and retry guidance shown by the CLI.
 
 ## Safety rules
 
