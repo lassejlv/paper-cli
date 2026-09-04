@@ -1,6 +1,6 @@
 [package]
 name = "paper-cli"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2024"
 description = "Agent-friendly command-line client for Paper Desktop's MCP server"
 license = "MIT"
