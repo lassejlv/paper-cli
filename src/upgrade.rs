@@ -5,12 +5,28 @@ use std::{
     process::{Command, Stdio},
 };
 
+#[cfg(windows)]
+use std::{
+    fs::{self, OpenOptions},
+    process,
+    time::{SystemTime, UNIX_EPOCH},
+};
+
 use anyhow::{Context, Result, bail};
 use serde_json::{Value, json};
 
+#[cfg(not(windows))]
 const REPOSITORY_URL: &str = "https://github.com/lassejlv/paper-cli";
+#[cfg(not(windows))]
 const INSTALL_SCRIPT_URL: &str =
     "https://raw.githubusercontent.com/lassejlv/paper-cli/main/install.sh";
+#[cfg(windows)]
+const INSTALL_SCRIPT_URL: &str =
+    "https://raw.githubusercontent.com/lassejlv/paper-cli/main/install.ps1";
+#[cfg(not(windows))]
+const INSTALL_SCRIPT_NAME: &str = "install.sh";
+#[cfg(windows)]
+const INSTALL_SCRIPT_NAME: &str = "install.ps1";
 const SKILL_NAME: &str = "use-paper-cli";
 const SKILL_UPDATE_ARGUMENTS: &[&str] = &[
     "--yes",
@@ -22,22 +38,22 @@ const SKILL_UPDATE_ARGUMENTS: &[&str] = &[
 ];
 
 pub fn run() -> Result<Value> {
-    if cfg!(windows) {
-        bail!(
-            "automatic CLI upgrades are not supported on Windows yet; download the latest \
-             Windows archive from {REPOSITORY_URL}/releases/latest"
-        );
-    }
-
     require_program(
         "npx",
         &["--version"],
         "Node.js and npm are required to update the global use-paper-cli skill",
     )?;
+    #[cfg(not(windows))]
     require_program(
         "sh",
         &["-c", "exit 0"],
         "a POSIX shell is required to run the paper CLI installer",
+    )?;
+    #[cfg(windows)]
+    require_program(
+        "powershell.exe",
+        &["-NoProfile", "-NonInteractive", "-Command", "exit 0"],
+        "Windows PowerShell is required to run the paper CLI installer",
     )?;
     execute_upgrade(update_skill, update_cli)
 }
@@ -73,7 +89,7 @@ fn update_skill() -> Result<()> {
     Ok(())
 }
 
-fn update_cli() -> Result<()> {
+fn update_cli() -> Result<CliUpdate> {
     let install_dir = env::current_exe()
         .context("failed to locate the running paper executable")?
         .parent()
@@ -85,15 +101,27 @@ fn update_cli() -> Result<()> {
         .context("failed to prepare the installer download")?
         .get(INSTALL_SCRIPT_URL)
         .send()
-        .context("failed to download install.sh")?
+        .with_context(|| format!("failed to download {INSTALL_SCRIPT_NAME}"))?
         .error_for_status()
-        .context("GitHub returned an error while downloading install.sh")?
+        .with_context(|| {
+            format!("GitHub returned an error while downloading {INSTALL_SCRIPT_NAME}")
+        })?
         .bytes()
-        .context("failed to read install.sh")?;
+        .with_context(|| format!("failed to read {INSTALL_SCRIPT_NAME}"))?;
 
-    run_install_script(&script, &install_dir)
+    #[cfg(not(windows))]
+    {
+        run_install_script(&script, &install_dir)?;
+        Ok(CliUpdate { scheduled: false })
+    }
+    #[cfg(windows)]
+    {
+        schedule_install_script(&script, &install_dir)?;
+        Ok(CliUpdate { scheduled: true })
+    }
 }
 
+#[cfg(not(windows))]
 fn run_install_script(script: &[u8], install_dir: &Path) -> Result<()> {
     let mut child = Command::new("sh")
         .arg("-s")
@@ -126,21 +154,97 @@ fn run_install_script(script: &[u8], install_dir: &Path) -> Result<()> {
     Ok(())
 }
 
+#[cfg(windows)]
+fn schedule_install_script(script: &[u8], install_dir: &Path) -> Result<()> {
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    let script_path =
+        env::temp_dir().join(format!("paper-cli-upgrade-{}-{nonce}.ps1", process::id()));
+    let mut script_file = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&script_path)
+        .with_context(|| {
+            format!(
+                "failed to create temporary installer {}",
+                script_path.display()
+            )
+        })?;
+    script_file.write_all(script).with_context(|| {
+        format!(
+            "failed to write temporary installer {}",
+            script_path.display()
+        )
+    })?;
+    drop(script_file);
+
+    let script_literal = powershell_path_literal(&script_path);
+    let command = format!(
+        "$ErrorActionPreference = 'Stop'; \
+         Wait-Process -Id {} -ErrorAction SilentlyContinue; \
+         try {{ & {script_literal} }} \
+         finally {{ Remove-Item -LiteralPath {script_literal} -Force -ErrorAction SilentlyContinue }}",
+        process::id()
+    );
+    let spawn_result = Command::new("powershell.exe")
+        .args([
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-Command",
+            &command,
+        ])
+        .env("PAPER_INSTALL_DIR", install_dir)
+        .env_remove("PAPER_VERSION")
+        .stdin(Stdio::null())
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .spawn();
+
+    if let Err(error) = spawn_result {
+        let _ = fs::remove_file(&script_path);
+        return Err(error).context("failed to schedule the Windows paper CLI installer");
+    }
+    Ok(())
+}
+
+#[cfg(windows)]
+fn powershell_path_literal(path: &Path) -> String {
+    format!("'{}'", path.to_string_lossy().replace('\'', "''"))
+}
+
+#[derive(Debug, Clone, Copy)]
+struct CliUpdate {
+    scheduled: bool,
+}
+
 fn execute_upgrade(
     mut update_skill: impl FnMut() -> Result<()>,
-    mut update_cli: impl FnMut() -> Result<()>,
+    mut update_cli: impl FnMut() -> Result<CliUpdate>,
 ) -> Result<Value> {
     eprintln!("Updating global use-paper-cli skill...");
     update_skill().context("failed to update global use-paper-cli skill")?;
 
     eprintln!("Updating paper CLI...");
-    update_cli().context("failed to update paper CLI")?;
-
-    Ok(json!({
-        "cli": {
+    let cli_update = update_cli().context("failed to update paper CLI")?;
+    let cli = if cli_update.scheduled {
+        json!({
+            "scheduled": true,
+            "source": INSTALL_SCRIPT_URL,
+            "updated": false
+        })
+    } else {
+        json!({
             "source": INSTALL_SCRIPT_URL,
             "updated": true
-        },
+        })
+    };
+
+    Ok(json!({
+        "cli": cli,
         "skill": {
             "name": SKILL_NAME,
             "scope": "global",
@@ -165,7 +269,7 @@ mod tests {
             },
             || {
                 updates.borrow_mut().push("cli");
-                Ok(())
+                Ok(CliUpdate { scheduled: false })
             },
         )
         .unwrap();
@@ -187,7 +291,7 @@ mod tests {
             },
             || {
                 attempts.set(attempts.get() + 1);
-                Ok(())
+                Ok(CliUpdate { scheduled: false })
             },
         )
         .unwrap_err();
@@ -196,7 +300,17 @@ mod tests {
         assert!(error.to_string().contains("global use-paper-cli skill"));
     }
 
-    #[cfg(unix)]
+    #[test]
+    fn scheduled_cli_update_is_reported_without_claiming_completion() {
+        let result = execute_upgrade(|| Ok(()), || Ok(CliUpdate { scheduled: true }))
+            .expect("upgrade succeeds");
+
+        assert_eq!(result["skill"]["updated"], true);
+        assert_eq!(result["cli"]["scheduled"], true);
+        assert_eq!(result["cli"]["updated"], false);
+    }
+
+    #[cfg(not(windows))]
     #[test]
     fn installer_receives_the_target_directory() {
         let directory = tempfile::tempdir().unwrap();

@@ -77,14 +77,16 @@ paper upgrade
 This command does not connect to Paper Desktop. It updates the skill with the
 `skills` CLI, then runs the same checksum-verifying release installer shown
 above in the directory containing the current `paper` executable. It requires
-`npx`, a POSIX shell, and internet access, but it does not require Cargo.
-Progress and subprocess diagnostics go to stderr; successful stdout is concise
-JSON describing both updated components.
+`npx`, internet access, and either a POSIX shell on macOS/Linux or Windows
+PowerShell, but it does not require Cargo. Progress and subprocess diagnostics
+go to stderr; successful stdout is concise JSON describing both components.
 
 The skill must have been installed globally through `npx skills`. If either
 prerequisite is missing, the command fails before changing either component.
-Automatic CLI upgrades currently support macOS and Linux; Windows users should
-rerun the PowerShell installer to update the CLI.
+On Windows, the command schedules the CLI installer to run immediately after
+the current `paper.exe` exits, allowing the installer to replace the executable
+without a file-lock conflict. The JSON result reports the CLI update as
+scheduled; installer progress then appears in the same terminal.
 
 ## Check connectivity
 
