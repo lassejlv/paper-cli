@@ -32,11 +32,16 @@ if ($env:OS -ne "Windows_NT") {
 [System.Net.ServicePointManager]::SecurityProtocol =
     [System.Net.ServicePointManager]::SecurityProtocol -bor [System.Net.SecurityProtocolType]::Tls12
 
-$architecture = switch ([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture) {
-    "X64" { "x86_64" }
-    "Arm64" { "aarch64" }
+$processorArchitecture = [System.Environment]::GetEnvironmentVariable("PROCESSOR_ARCHITEW6432")
+if (-not $processorArchitecture) {
+    $processorArchitecture = [System.Environment]::GetEnvironmentVariable("PROCESSOR_ARCHITECTURE")
+}
+
+$architecture = switch ($processorArchitecture) {
+    "AMD64" { "x86_64" }
+    "ARM64" { "aarch64" }
     default {
-        Stop-Install "unsupported CPU architecture: $([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)"
+        Stop-Install "unsupported CPU architecture: $processorArchitecture"
     }
 }
 
