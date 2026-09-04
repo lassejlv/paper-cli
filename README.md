@@ -35,8 +35,24 @@ curl --proto '=https' --tlsv1.2 -LsSf \
   PAPER_INSTALL_DIR="$HOME/bin" PAPER_VERSION=v0.1.0 sh
 ```
 
-Windows users can download the matching `.zip` from
-[GitHub Releases](https://github.com/lassejlv/paper-cli/releases).
+Install the latest Windows binary from PowerShell:
+
+```powershell
+Invoke-RestMethod https://raw.githubusercontent.com/lassejlv/paper-cli/main/install.ps1 |
+  Invoke-Expression
+```
+
+The PowerShell installer detects Intel or ARM, verifies the release checksum,
+and installs `paper.exe` to `~\.local\bin`. Set `PAPER_INSTALL_DIR` or
+`PAPER_VERSION` in the process environment before running it to choose another
+directory or pin a release:
+
+```powershell
+$env:PAPER_INSTALL_DIR = "$HOME\bin"
+$env:PAPER_VERSION = "v0.1.0"
+Invoke-RestMethod https://raw.githubusercontent.com/lassejlv/paper-cli/main/install.ps1 |
+  Invoke-Expression
+```
 
 To build and install from source instead, use a current stable Rust toolchain:
 
@@ -68,7 +84,7 @@ JSON describing both updated components.
 The skill must have been installed globally through `npx skills`. If either
 prerequisite is missing, the command fails before changing either component.
 Automatic CLI upgrades currently support macOS and Linux; Windows users should
-install the latest release archive manually.
+rerun the PowerShell installer to update the CLI.
 
 ## Check connectivity
 
